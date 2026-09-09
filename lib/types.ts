@@ -16,11 +16,13 @@ export interface OwnerEnrichment {
 
 export interface ReviewPayload {
   review_id: string;
+  review_type?: 'owner' | 'tender' | string;
   attempt: number;
   resume_url: string;
   reference_number: string;
   project_name: string;
-  owner: OwnerEnrichment;
+  owner?: OwnerEnrichment;
+  data?: Record<string, any>;
   confidence: 'high' | 'medium' | 'low' | string;
   confidence_reason: string;
 }
