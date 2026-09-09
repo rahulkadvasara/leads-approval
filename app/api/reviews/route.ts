@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getActiveReview, setActiveReview } from '@/lib/store';
+import { getActiveReview, setActiveReview, clearActiveReview } from '@/lib/store';
 import { validateReviewPayload } from '@/lib/validation';
 
 /**
@@ -71,6 +71,26 @@ export async function GET() {
     console.error('Error handling GET /api/reviews:', error);
     return NextResponse.json(
       { success: false, error: 'Internal server error while retrieving active review.' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/reviews
+ * Endpoint to clear the currently active lead review from memory.
+ */
+export async function DELETE() {
+  try {
+    clearActiveReview();
+    return NextResponse.json(
+      { success: true, message: 'Active review cleared from memory.' },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Error handling DELETE /api/reviews:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to clear active review.' },
       { status: 500 }
     );
   }

@@ -12,7 +12,6 @@ export default function ReviewPage() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
-  const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
 
   useEffect(() => {
     fetchActiveReview();
@@ -58,7 +57,6 @@ export default function ReviewPage() {
     };
 
     try {
-      // Attempt direct POST to n8n resume_url as specified
       let success = false;
       try {
         const n8nRes = await fetch(review.resume_url, {
@@ -98,12 +96,18 @@ export default function ReviewPage() {
         }
       }
 
-      setIsSubmitted(true);
-      if (decision === 'accepted') {
-        setSubmittedMessage('Review accepted. The workflow will continue.');
-      } else {
-        setSubmittedMessage('Review rejected. The workflow will reconsider the lead using your feedback.');
-      }
+      // Clear review from server-side memory
+      await fetch('/api/reviews', { method: 'DELETE' });
+
+      // Clear local state and set submission message
+      const successMsg =
+        decision === 'accepted'
+          ? 'Review accepted. The workflow will continue.'
+          : 'Review rejected. The workflow will reconsider the lead using your feedback.';
+
+      setSubmittedMessage(successMsg);
+      setReview(null);
+      setFeedback('');
     } catch (err) {
       console.error('Submission error:', err);
       setError(
@@ -176,8 +180,22 @@ export default function ReviewPage() {
   if (!review) {
     return (
       <main className="min-h-screen bg-slate-50 dark:bg-slate-950 py-16 px-4 sm:px-6 lg:px-8 text-slate-900 dark:text-slate-100">
-        <div className="max-w-lg mx-auto text-center">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 shadow-sm">
+        <div className="max-w-lg mx-auto space-y-4">
+
+          {/* Display notification banner if review was just submitted */}
+          {submittedMessage && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 rounded-xl p-4 text-emerald-800 dark:text-emerald-200 flex items-start gap-3 shadow-sm">
+              <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <div>
+                <p className="font-semibold text-sm">{submittedMessage}</p>
+                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">The review has been removed from server memory.</p>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 shadow-sm text-center">
             <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4 text-slate-400">
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -188,7 +206,10 @@ export default function ReviewPage() {
               There is currently no active lead pending human review. Send a payload from n8n to <code className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-800 dark:text-slate-200">POST /api/reviews</code> to begin.
             </p>
             <button
-              onClick={fetchActiveReview}
+              onClick={() => {
+                setSubmittedMessage(null);
+                fetchActiveReview();
+              }}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition shadow-sm"
             >
               Check for Review
@@ -217,18 +238,6 @@ export default function ReviewPage() {
             {getConfidenceBadge(review.confidence)}
           </div>
         </header>
-
-        {/* Global Success Banner */}
-        {submittedMessage && (
-          <div className="bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 rounded-lg p-4 text-emerald-800 dark:text-emerald-200 flex items-start gap-3 shadow-sm">
-            <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <div>
-              <p className="font-semibold text-sm">{submittedMessage}</p>
-            </div>
-          </div>
-        )}
 
         {/* Global Error Banner */}
         {error && (
@@ -427,7 +436,7 @@ export default function ReviewPage() {
             <textarea
               id="feedback-textarea"
               rows={4}
-              disabled={submitting || isSubmitted}
+              disabled={submitting}
               value={feedback}
               onChange={(e) => {
                 setFeedback(e.target.value);
@@ -448,7 +457,7 @@ export default function ReviewPage() {
         <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm flex flex-col sm:flex-row items-center justify-end gap-4">
           <button
             type="button"
-            disabled={submitting || isSubmitted}
+            disabled={submitting}
             onClick={() => sendDecision('rejected')}
             className="w-full sm:w-auto px-6 py-2.5 bg-rose-600 hover:bg-rose-700 focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 text-white font-medium rounded-lg text-sm transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
@@ -456,7 +465,7 @@ export default function ReviewPage() {
           </button>
           <button
             type="button"
-            disabled={submitting || isSubmitted}
+            disabled={submitting}
             onClick={() => sendDecision('accepted')}
             className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 text-white font-medium rounded-lg text-sm transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >

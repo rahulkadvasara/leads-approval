@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
+import { clearActiveReview } from '@/lib/store';
 
 /**
  * POST /api/reviews/submit
  * Server-side relay endpoint to post human decision to n8n resume_url.
- * Prevents client-side CORS issues if n8n instance does not configure CORS headers.
+ * Automatically clears active review from memory upon successful submission.
  */
 export async function POST(request: Request) {
   try {
@@ -60,8 +61,11 @@ export async function POST(request: Request) {
       );
     }
 
+    // Clear active review from server memory after successful submission
+    clearActiveReview();
+
     return NextResponse.json(
-      { success: true, message: 'Decision submitted successfully to n8n.' },
+      { success: true, message: 'Decision submitted successfully to n8n and active review cleared.' },
       { status: 200 }
     );
   } catch (error) {
