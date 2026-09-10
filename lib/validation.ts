@@ -43,8 +43,19 @@ export function validateReviewPayload(data: unknown): ValidationResult {
     return { isValid: false, error: 'Missing or invalid "project_name" field.' };
   }
 
-  if (!payload.owner || typeof payload.owner !== 'object') {
-    return { isValid: false, error: 'Missing or invalid "owner" object.' };
+  const enrichmentData =
+    typeof payload.data === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(payload.data);
+          } catch {
+            return null;
+          }
+        })()
+      : (payload.data ?? payload.owner);
+
+  if (!enrichmentData || typeof enrichmentData !== 'object') {
+    return { isValid: false, error: 'Missing or invalid "data" or "owner" enrichment object.' };
   }
 
   if (!payload.confidence || typeof payload.confidence !== 'string') {
@@ -55,15 +66,21 @@ export function validateReviewPayload(data: unknown): ValidationResult {
     return { isValid: false, error: 'Missing or invalid "confidence_reason" field.' };
   }
 
+  const reviewType = payload.review_type && typeof payload.review_type === 'string'
+    ? payload.review_type.trim().toLowerCase()
+    : 'owner';
+
   return {
     isValid: true,
     payload: {
       review_id: payload.review_id.trim(),
+      review_type: reviewType,
       attempt: payload.attempt,
       resume_url: payload.resume_url.trim(),
       reference_number: payload.reference_number.trim(),
       project_name: payload.project_name.trim(),
       owner: payload.owner,
+      data: enrichmentData,
       confidence: payload.confidence.toLowerCase().trim(),
       confidence_reason: payload.confidence_reason.trim(),
     },
