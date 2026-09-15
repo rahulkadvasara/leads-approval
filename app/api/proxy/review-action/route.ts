@@ -6,42 +6,39 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    try {
-      const res = await fetch(TARGET_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
+    const res = await fetch(TARGET_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
 
-      if (res.ok) {
-        const text = await res.text();
-        let data: any;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = { message: text };
-        }
-        return NextResponse.json(
-          {
-            success: true,
-            message: data.message || 'Action executed successfully on n8n.',
-            data,
-          },
-          { status: 200 }
-        );
-      }
-    } catch (err) {
-      console.warn('Proxy POST to n8n failed or inactive:', err);
+    const text = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: text };
     }
 
-    // Fallback response for live UI demonstration when n8n test webhook is inactive
+    if (!res.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: data.message || data.hint || `n8n POST webhook returned HTTP ${res.status}`,
+          details: data,
+        },
+        { status: res.status }
+      );
+    }
+
     return NextResponse.json(
       {
         success: true,
-        message: `Action '${body.decision || 'submitted'}' processed successfully for project ${body.reference_number || ''}.`,
+        message: data.message || 'Action executed successfully on n8n.',
+        data,
       },
       { status: 200 }
     );
@@ -50,7 +47,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Internal proxy error posting to n8n.',
+        error: error instanceof Error ? error.message : 'Network error posting to n8n webhook.',
       },
       { status: 500 }
     );
