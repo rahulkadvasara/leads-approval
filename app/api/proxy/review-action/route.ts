@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const TARGET_URL = 'https://ai-automation-stage.oomnieye.com/webhook-test/review-action';
+const TARGET_URL = 'https://ai-automation-stage.oomnieye.com/webhook/review-action';
 
 export async function POST(request: Request) {
   try {

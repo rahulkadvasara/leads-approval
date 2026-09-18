@@ -1,7 +1,7 @@
 import { PendingReviewsResponse, ReviewActionPayload, ReviewActionResponse } from './types';
 
-const N8N_GET_URL = 'https://ai-automation-stage.oomnieye.com/webhook-test/pending-reviews';
-const N8N_POST_URL = 'https://ai-automation-stage.oomnieye.com/webhook-test/review-action';
+const N8N_GET_URL = 'https://ai-automation-stage.oomnieye.com/webhook/pending-reviews';
+const N8N_POST_URL = 'https://ai-automation-stage.oomnieye.com/webhook/review-action';
 
 /**
  * Fetch pending reviews from n8n GET webhook (with proxy fallback)
