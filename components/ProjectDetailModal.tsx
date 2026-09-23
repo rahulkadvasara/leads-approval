@@ -291,16 +291,25 @@ export default function ProjectDetailModal({
 
             {/* Readonly Owner Fields */}
             <div className="space-y-3 pt-2">
-              {ownerDetails.map((f) => (
-                <div key={f.key} className="space-y-1">
-                  <span className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                    {f.label}
-                  </span>
-                  <p className="text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-lg p-3 leading-relaxed">
-                    {f.formatted}
-                  </p>
-                </div>
-              ))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {ownerDetails.map((f) => (
+                  <div
+                    key={f.key}
+                    className={
+                      f.key.includes('reasoning') || f.key.includes('signal')
+                        ? 'sm:col-span-2 space-y-1'
+                        : 'space-y-1'
+                    }
+                  >
+                    <span className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                      {f.label}
+                    </span>
+                    <p className="text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-lg p-3 leading-relaxed font-medium text-slate-800 dark:text-slate-200 break-words">
+                      {f.formatted}
+                    </p>
+                  </div>
+                ))}
+              </div>
 
               {/* Source URLs */}
               {ownerSourceUrls.length > 0 && (
@@ -416,16 +425,25 @@ export default function ProjectDetailModal({
 
             {/* Readonly Contractor Fields */}
             <div className="space-y-3 pt-2">
-              {contractorDetails.map((f) => (
-                <div key={f.key} className="space-y-1">
-                  <span className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                    {f.label}
-                  </span>
-                  <p className="text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-lg p-3 leading-relaxed">
-                    {f.formatted}
-                  </p>
-                </div>
-              ))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {contractorDetails.map((f) => (
+                  <div
+                    key={f.key}
+                    className={
+                      f.key.includes('reasoning') || f.key.includes('reason')
+                        ? 'sm:col-span-2 space-y-1'
+                        : 'space-y-1'
+                    }
+                  >
+                    <span className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                      {f.label}
+                    </span>
+                    <p className="text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-lg p-3 leading-relaxed font-medium text-slate-800 dark:text-slate-200 break-words">
+                      {f.formatted}
+                    </p>
+                  </div>
+                ))}
+              </div>
 
               {contractorSourceUrls.length > 0 && (
                 <div className="space-y-1.5 pt-1">

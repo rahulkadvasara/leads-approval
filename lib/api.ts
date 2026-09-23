@@ -52,50 +52,105 @@ export async function fetchPendingReviews(): Promise<PendingReviewsResponse> {
 }
 
 /**
+ * Helper to check whether an object is an actual review record (and not an empty placeholder like `{}`)
+ */
+function isValidReviewRecord(item: any): boolean {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  if (Object.keys(item).length === 0) return false;
+
+  const hasValue = (val: any) =>
+    val !== undefined && val !== null && String(val).trim() !== '' && String(val).trim().toUpperCase() !== 'N/A';
+
+  const refNum = item['reference_number'] ?? item['Reference Number'] ?? item['ref_num'];
+  const projName = item['project_name'] ?? item['Project Name'] ?? item['name'];
+  const owner = item['owner_matched_name'] ?? item['Owner Matched Name'] ?? item['Owners'] ?? item['Owner'];
+  const contractor = item['contractor_name'] ?? item['Contractor Name'] ?? item['Contractor'];
+  const slNo = item['Sl No'] ?? item['sl_no'] ?? item['row_number'];
+  const needsRev = item['Needs Review'] ?? item['needs_review'];
+
+  return (
+    hasValue(refNum) ||
+    hasValue(projName) ||
+    hasValue(owner) ||
+    hasValue(contractor) ||
+    hasValue(slNo) ||
+    hasValue(needsRev)
+  );
+}
+
+/**
  * Normalizes n8n GET webhook response data
  */
 function parsePendingReviewsData(data: any): PendingReviewsResponse {
-  if (!data) {
-    return { success: false, count: 0, reviews: [], error: 'Received empty response from server.' };
+  if (data === null || data === undefined) {
+    return { success: true, count: 0, reviews: [] };
   }
 
-  // Case 1: Standard response format { success: true, count: 2, reviews: [...] }
-  if (Array.isArray(data.reviews)) {
+  // Case 1: Array returned directly [...]
+  if (Array.isArray(data)) {
+    const validReviews = data.filter(isValidReviewRecord);
+    return {
+      success: true,
+      count: validReviews.length,
+      reviews: validReviews,
+    };
+  }
+
+  // Case 2: Object response
+  if (typeof data === 'object') {
+    // Explicit error response without reviews
+    if (data.error && typeof data.error === 'string' && data.success === false && !data.reviews) {
+      return {
+        success: false,
+        count: 0,
+        reviews: [],
+        error: data.error || data.message || 'Error fetching pending reviews.',
+      };
+    }
+
+    // Standard response format { success: true, count: X, reviews: [...] }
+    if (Array.isArray(data.reviews)) {
+      const validReviews = data.reviews.filter(isValidReviewRecord);
+      return {
+        success: data.success ?? true,
+        count: validReviews.length,
+        reviews: validReviews,
+      };
+    }
+
+    if (data.count === 0) {
+      return { success: true, count: 0, reviews: [] };
+    }
+
+    // Single review object returned inside `reviews` property
+    if (data.reviews && typeof data.reviews === 'object' && !Array.isArray(data.reviews)) {
+      if (isValidReviewRecord(data.reviews)) {
+        return { success: data.success ?? true, count: 1, reviews: [data.reviews] };
+      }
+      return { success: data.success ?? true, count: 0, reviews: [] };
+    }
+
+    // Check if `data` itself is a single valid review item
+    if (isValidReviewRecord(data)) {
+      return {
+        success: data.success ?? true,
+        count: 1,
+        reviews: [data],
+      };
+    }
+
+    // Empty or non-review status object (or `{}` inside response)
     return {
       success: data.success ?? true,
-      count: typeof data.count === 'number' ? data.count : data.reviews.length,
-      reviews: data.reviews,
-    };
-  }
-
-  // Case 2: Array returned directly [...]
-  if (Array.isArray(data)) {
-    return {
-      success: true,
-      count: data.length,
-      reviews: data,
-    };
-  }
-
-  // Case 3: Single review object returned
-  if (typeof data === 'object' && !data.error) {
-    if (data.reviews && typeof data.reviews === 'object') {
-      const arr = Array.isArray(data.reviews) ? data.reviews : [data.reviews];
-      return { success: true, count: arr.length, reviews: arr };
-    }
-    // If it has reference_number or project_name or similar fields
-    return {
-      success: true,
-      count: 1,
-      reviews: [data],
+      count: 0,
+      reviews: [],
     };
   }
 
   return {
-    success: false,
+    success: true,
     count: 0,
     reviews: [],
-    error: data.message || data.error || 'Invalid pending reviews payload structure.',
   };
 }
 

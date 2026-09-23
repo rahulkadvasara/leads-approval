@@ -202,7 +202,10 @@ export function getProjectDetailsSection(item: ReviewItem): SectionField[] {
     { key: 'completion_percentage', label: 'Completion Percentage', possible: ['completion_percentage', 'Completion Percentage'] },
     { key: 'estimated_completion_date', label: 'Est. Completion Date', possible: ['estimated_completion_date', 'Estimated Completion Date'] },
     { key: 'updated_date', label: 'Updated Date', possible: ['updated_date', 'Updated Date', 'updation date'] },
-    { key: 'construction_value', label: 'Construction Value', possible: ['construction_value', 'Construction Value', 'Construction Value Spent', 'Value(USD)', 'Main/Infra/EPC Contractor Award Value'] },
+    { key: 'value_usd', label: 'Value (USD)', possible: ['value_usd', 'Value(USD)', 'Value (USD)', 'construction_value', 'Construction Value'] },
+    { key: 'construction_value_spent', label: 'Construction Value Spent', possible: ['construction_value_spent', 'Construction Value Spent'] },
+    { key: 'est_contractor_award_date', label: 'Est. Contractor Award Date', possible: ['est_main_infra_epc_contractor_award_date', 'Est. Main/Infra/EPC Contractor Award Date'] },
+    { key: 'contractor_award_value', label: 'Contractor Award Value', possible: ['main_infra_epc_contractor_award_value', 'Main/Infra/EPC Contractor Award Value'] },
   ];
 
   return fields.map((f) => {
@@ -219,17 +222,23 @@ export function getProjectDetailsSection(item: ReviewItem): SectionField[] {
 export function getOwnerDetailsSection(item: ReviewItem): SectionField[] {
   const fields = [
     { key: 'recent_news_signal', label: 'Recent News Signal', possible: ['recent_news_signal', 'Recent News Signal'] },
-    { key: 'enrichment_confidence', label: 'Enrichment Confidence', possible: ['enrichment_confidence', 'Enrichment Confidence', 'Math Confidence Score', 'Math Confidence Tier'] },
-    { key: 'confidence_reason', label: 'Confidence Reason', possible: ['confidence_reason', 'Confidence Reason', 'Math Confidence Reasoning'] },
+    { key: 'math_confidence_score', label: 'Math Confidence Score', possible: ['math_confidence_score', 'Math Confidence Score'] },
+    { key: 'math_confidence_tier', label: 'Math Confidence Tier', possible: ['math_confidence_tier', 'Math Confidence Tier', 'enrichment_confidence', 'Enrichment Confidence'] },
+    { key: 'math_confidence_reasoning', label: 'Math Confidence Reasoning', possible: ['math_confidence_reasoning', 'Math Confidence Reasoning', 'confidence_reason', 'Confidence Reason'] },
+    { key: 'needs_review', label: 'Needs Review', possible: ['needs_review', 'Needs Review'] },
   ];
 
   return fields.map((f) => {
     const raw = getRawValue(item, ...f.possible);
+    let formatted = formatDisplayValue(raw);
+    if (typeof raw === 'boolean') {
+      formatted = raw ? 'True' : 'False';
+    }
     return {
       key: f.key,
       label: f.label,
       value: raw,
-      formatted: formatDisplayValue(raw),
+      formatted,
     };
   });
 }
@@ -237,17 +246,25 @@ export function getOwnerDetailsSection(item: ReviewItem): SectionField[] {
 export function getContractorDetailsSection(item: ReviewItem): SectionField[] {
   const fields = [
     { key: 'contractor_found', label: 'Contractor Found', possible: ['contractor_found', 'Contractor Found'] },
-    { key: 'contractor_confidence', label: 'Contractor Confidence', possible: ['contractor_confidence', 'Contractor Confidence'] },
-    { key: 'contractor_confidence_reason', label: 'Contractor Confidence Reason', possible: ['contractor_confidence_reason', 'Contractor Confidence Reason'] },
+    { key: 'contractor_contact_position', label: 'Contractor Contact Position', possible: ['contractor_contact_position', 'Contractor Contact Position'] },
+    { key: 'contractor_contact_number', label: 'Contractor Contact Number', possible: ['contractor_contact_number', 'Contractor Contact Number'] },
+    { key: 'contractor_math_confidence_score', label: 'Contractor Math Confidence Score', possible: ['contractor_math_confidence_score', 'Contractor Math Confidence Score'] },
+    { key: 'contractor_math_confidence_tier', label: 'Contractor Math Confidence Tier', possible: ['contractor_math_confidence_tier', 'Contractor Math Confidence Tier', 'contractor_confidence', 'Contractor Confidence'] },
+    { key: 'contractor_math_confidence_reasoning', label: 'Contractor Math Confidence Reasoning', possible: ['contractor_math_confidence_reasoning', 'Contractor Math Confidence Reasoning', 'contractor_confidence_reason', 'Contractor Confidence Reason'] },
+    { key: 'needs_review_for_contractor', label: 'Needs Review for Contractor', possible: ['needs_review_for_contractor', 'Needs Review for Contractor'] },
   ];
 
   return fields.map((f) => {
     const raw = getRawValue(item, ...f.possible);
+    let formatted = formatDisplayValue(raw);
+    if (typeof raw === 'boolean') {
+      formatted = raw ? 'True' : 'False';
+    }
     return {
       key: f.key,
       label: f.label,
       value: raw,
-      formatted: formatDisplayValue(raw),
+      formatted,
     };
   });
 }
@@ -267,8 +284,10 @@ export function getOtherFieldsSection(item: ReviewItem): SectionField[] {
     'sourceurls', 'enrichmentconfidence', 'confidencereason', 'mathconfidencescore',
     'mathconfidencetier', 'mathconfidencereasoning', 'needsreview', 'contractorfound',
     'contractorname', 'contractor', 'contractortype', 'contractorwebsite', 'contractorcontactname',
-    'contractorcontactemail', 'contractorconfidence', 'contractorconfidencereason',
-    'contractorsourceurls', 'statusforfields', 'maildraft', 'reasonforrejection', 'status'
+    'contractorcontactposition', 'contractorcontactemail', 'contractorcontactnumber',
+    'contractormathconfidencescore', 'contractormathconfidencetier', 'contractormathconfidencereasoning',
+    'contractorconfidence', 'contractorconfidencereason', 'needsreviewforcontractor',
+    'contractorsourceurls', 'statusforreview', 'emailstatus', 'feedback', 'slno', 'rownumber'
   ]);
 
   const otherFields: SectionField[] = [];
@@ -296,25 +315,46 @@ export function getOtherFieldsSection(item: ReviewItem): SectionField[] {
  * Extracts list of source URLs safely (handling strings or objects).
  */
 export function extractSourceUrls(item: ReviewItem, keyName: string): { url: string; label?: string }[] {
-  const raw = getRawValue(item, keyName, keyName.replace(/_/g, ' '), 'Source URLs');
+  if (!item || typeof item !== 'object') return [];
+
+  let raw: any;
+  if (keyName === 'contractor_source_urls' || keyName.toLowerCase().includes('contractor')) {
+    raw = getRawValue(item, 'contractor_source_urls', 'Contractor Source URLs');
+  } else {
+    raw = getRawValue(item, 'source_urls', 'Source URLs');
+  }
+
   if (!raw) return [];
 
   if (Array.isArray(raw)) {
-    return raw.map((item) => {
-      if (typeof item === 'string') return { url: item };
-      if (typeof item === 'object' && item !== null) {
-        return {
-          url: item.url || item.link || String(item),
-          label: item.type || item.label || item.title || undefined,
-        };
-      }
-      return { url: String(item) };
-    }).filter((s) => Boolean(s.url));
+    return raw
+      .map((entry) => {
+        if (typeof entry === 'string') return { url: entry.trim() };
+        if (typeof entry === 'object' && entry !== null) {
+          return {
+            url: (entry.url || entry.link || String(entry)).trim(),
+            label: entry.type || entry.label || entry.title || undefined,
+          };
+        }
+        return { url: String(entry).trim() };
+      })
+      .filter((s) => Boolean(s.url) && (s.url.startsWith('http://') || s.url.startsWith('https://')));
   }
 
   if (typeof raw === 'string') {
-    return raw
-      .split(/[\n,]+/)
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map((u) => ({ url: String(u).trim() }))
+            .filter((s) => s.url.startsWith('http://') || s.url.startsWith('https://'));
+        }
+      } catch {}
+    }
+    return trimmed
+      .split(/[\n,;]+/)
       .map((s) => s.trim())
       .filter((s) => s.startsWith('http://') || s.startsWith('https://'))
       .map((url) => ({ url }));
