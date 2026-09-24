@@ -1,7 +1,17 @@
-import { PendingReviewsResponse, ReviewActionPayload, ReviewActionResponse } from './types';
+import { PendingReviewsResponse, ReviewActionPayload, ReviewActionResponse, TriggerEnrichmentResponse } from './types';
 
-const N8N_GET_URL = 'https://ai-automation-stage.oomnieye.com/webhook/pending-reviews';
-const N8N_POST_URL = 'https://ai-automation-stage.oomnieye.com/webhook/review-action';
+const N8N_GET_URL =
+  process.env.NEXT_PUBLIC_PENDING_REVIEWS_WEBHOOK_URL ||
+  'https://ai-automation-stage.oomnieye.com/webhook/pending-reviews';
+const N8N_POST_URL =
+  process.env.NEXT_PUBLIC_REVIEW_ACTION_WEBHOOK_URL ||
+  'https://ai-automation-stage.oomnieye.com/webhook/review-action';
+
+export const WF1_WEBHOOK_URL =
+  process.env.NEXT_PUBLIC_WF1_WEBHOOK_URL ||
+  'https://ai-automation-stage.oomnieye.com/webhook/lead-enrichment';
+
+
 
 /**
  * Fetch pending reviews from n8n GET webhook (with proxy fallback)
@@ -224,3 +234,67 @@ export async function submitReviewAction(payload: ReviewActionPayload): Promise<
     };
   }
 }
+
+/**
+ * Trigger WF-1 Lead Enrichment n8n POST webhook (with proxy fallback)
+ */
+export async function triggerLeadEnrichment(): Promise<TriggerEnrichmentResponse> {
+  const requestBody = JSON.stringify({});
+
+  // Attempt 1: Direct browser fetch to n8n webhook
+  try {
+    const res = await fetch(WF1_WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: requestBody,
+    });
+
+    if (res.ok) {
+      let data: any;
+      try {
+        data = await res.json();
+      } catch {
+        const text = await res.text();
+        data = { message: text };
+      }
+      return {
+        success: true,
+        message: data?.message || 'Lead enrichment completed successfully.',
+      };
+    }
+  } catch (directErr) {
+    console.warn('Direct POST to WF-1 webhook failed (CORS or network). Retrying via proxy...', directErr);
+  }
+
+  // Attempt 2: Server-side proxy route `/api/proxy/lead-enrichment`
+  try {
+    const proxyRes = await fetch('/api/proxy/lead-enrichment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: requestBody,
+    });
+
+    const proxyData = await proxyRes.json();
+    if (!proxyRes.ok || !proxyData.success) {
+      throw new Error(proxyData.error || `n8n POST webhook returned HTTP ${proxyRes.status}`);
+    }
+
+    return {
+      success: true,
+      message: proxyData.message || 'Lead enrichment completed successfully.',
+    };
+  } catch (proxyErr) {
+    console.error('Error triggering lead enrichment:', proxyErr);
+    return {
+      success: false,
+      error: proxyErr instanceof Error ? proxyErr.message : 'Network error connecting to WF-1 webhook.',
+    };
+  }
+}
+

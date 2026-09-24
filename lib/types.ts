@@ -36,6 +36,13 @@ export interface ReviewActionResponse {
   error?: string;
 }
 
+export interface TriggerEnrichmentResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+
 // Legacy types for backwards compatibility with pre-existing store/validation
 export interface SourceUrl {
   url: string;

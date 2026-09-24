@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { DecisionAction, ReviewItem } from '@/lib/types';
-import { fetchPendingReviews } from '@/lib/api';
+import { fetchPendingReviews, triggerLeadEnrichment } from '@/lib/api';
 import { getRawValue, getTableRowSummary } from '@/lib/mapping';
 import ProjectDetailModal from '@/components/ProjectDetailModal';
 
@@ -10,6 +10,8 @@ export default function ReviewPage() {
   const [projects, setProjects] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [enriching, setEnriching] = useState<boolean>(false);
+  const [enrichmentMessage, setEnrichmentMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
@@ -23,7 +25,7 @@ export default function ReviewPage() {
   // Notification Toast state
   const [toastMessage, setToastMessage] = useState<{
     text: string;
-    type: 'success' | 'info';
+    type: 'success' | 'info' | 'error';
   } | null>(null);
 
   const loadReviews = useCallback(async (isRefresh = false) => {
@@ -52,11 +54,36 @@ export default function ReviewPage() {
   }, [loadReviews]);
 
   // Toast auto-clear
-  const showToast = (text: string, type: 'success' | 'info' = 'success') => {
+  const showToast = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => {
       setToastMessage(null);
-    }, 4000);
+    }, 5000);
+  };
+
+  // Run WF-1 Lead Enrichment handler
+  const handleRunEnrichment = async () => {
+    if (enriching) return;
+
+    setEnriching(true);
+    const runningMsg = 'Lead enrichment is running. This may take a few minutes.';
+    setEnrichmentMessage(runningMsg);
+    showToast(runningMsg, 'info');
+
+    const res = await triggerLeadEnrichment();
+
+    setEnriching(false);
+
+    if (res.success) {
+      const successMsg = 'Lead enrichment completed successfully.';
+      setEnrichmentMessage(successMsg);
+      showToast(successMsg, 'success');
+      await loadReviews(true);
+    } else {
+      const errorMsg = 'Lead enrichment failed. Please try again.';
+      setEnrichmentMessage(errorMsg);
+      showToast(errorMsg, 'error');
+    }
   };
 
   // Open modal handler
@@ -108,13 +135,28 @@ export default function ReviewPage() {
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans pb-16">
       {/* Toast Notification Banner */}
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-60 animate-in slide-in-from-top-4 fade-in duration-300">
-          <div className="bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-slate-700 dark:border-slate-300 text-xs sm:text-sm font-medium">
-            <span className="text-emerald-400 dark:text-emerald-600 text-base">✓</span>
+        <div className="fixed top-24 right-5 sm:right-8 z-60 animate-in slide-in-from-top-4 fade-in duration-300">
+
+          <div className={`px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 border text-xs sm:text-sm font-medium ${
+            toastMessage.type === 'error'
+              ? 'bg-rose-900 text-white border-rose-700'
+              : toastMessage.type === 'info'
+              ? 'bg-amber-950 text-amber-100 border-amber-800'
+              : 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-700 dark:border-slate-300'
+          }`}>
+            <span className={`text-base ${
+              toastMessage.type === 'error'
+                ? 'text-rose-400'
+                : toastMessage.type === 'info'
+                ? 'text-amber-400'
+                : 'text-emerald-400 dark:text-emerald-600'
+            }`}>
+              {toastMessage.type === 'error' ? '✕' : toastMessage.type === 'info' ? 'ℹ' : '✓'}
+            </span>
             <span>{toastMessage.text}</span>
             <button
               onClick={() => setToastMessage(null)}
-              className="ml-2 text-slate-400 hover:text-white dark:hover:text-slate-900"
+              className="ml-2 text-slate-400 hover:text-white dark:hover:text-slate-900 cursor-pointer"
             >
               ✕
             </button>
@@ -145,33 +187,85 @@ export default function ReviewPage() {
           </div>
 
           {/* Refresh & Sync Controls */}
-          <div className="flex items-center gap-3 self-end sm:self-auto">
-            {lastUpdated && (
-              <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden md:inline">
-                Last checked: {lastUpdated}
+          <div className="flex flex-col items-end gap-1.5 self-end sm:self-auto">
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+              {lastUpdated && (
+                <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden md:inline">
+                  Last checked: {lastUpdated}
+                </span>
+              )}
+
+              <button
+                onClick={() => loadReviews(true)}
+                disabled={loading || refreshing}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-lg text-xs transition shadow-md shadow-indigo-500/20 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+              >
+                <svg
+                  className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+
+              <button
+                onClick={handleRunEnrichment}
+                disabled={enriching}
+                aria-label="Run Lead Enrichment"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-lg text-xs transition shadow-md shadow-indigo-500/20 disabled:opacity-50 flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+              >
+                {enriching ? (
+                  <svg
+                    className="w-4 h-4 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
+                  </svg>
+                )}
+                {enriching ? 'Running...' : 'Run Lead Enrichment'}
+              </button>
+            </div>
+
+            {enrichmentMessage && (
+              <span className={`text-[11px] font-medium transition text-right ${
+                enriching
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : enrichmentMessage.includes('completed')
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-rose-600 dark:text-rose-400'
+              }`}>
+                {enrichmentMessage}
               </span>
             )}
-
-            <button
-              onClick={() => loadReviews(true)}
-              disabled={loading || refreshing}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-lg text-xs transition shadow-md shadow-indigo-500/20 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
-            >
-              <svg
-                className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              {refreshing ? 'Refreshing...' : 'Refresh'}
-            </button>
           </div>
         </div>
       </header>

@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 
-const TARGET_URL = 'https://ai-automation-stage.oomnieye.com/webhook/pending-reviews';
+const TARGET_URL =
+  process.env.NEXT_PUBLIC_PENDING_REVIEWS_WEBHOOK_URL ||
+  'https://ai-automation-stage.oomnieye.com/webhook/pending-reviews';
+
 
 export async function GET() {
   try {
