@@ -1,12 +1,18 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { DecisionAction, ReviewItem } from '@/lib/types';
 import { fetchPendingReviews, triggerLeadEnrichment } from '@/lib/api';
 import { getRawValue, getTableRowSummary } from '@/lib/mapping';
 import ProjectDetailModal from '@/components/ProjectDetailModal';
+import { verifyAuthUser, clearAuthUser, AuthUser } from '@/lib/auth';
 
 export default function ReviewPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
   const [projects, setProjects] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -27,6 +33,28 @@ export default function ReviewPage() {
     text: string;
     type: 'success' | 'info' | 'error';
   } | null>(null);
+
+  // Strict Auth guard: verify session with server token; redirect to login if not authenticated
+  useEffect(() => {
+    let isMounted = true;
+    verifyAuthUser().then((authUser) => {
+      if (!isMounted) return;
+      if (!authUser) {
+        router.replace('/');
+        return;
+      }
+      setUser(authUser);
+      setCheckingAuth(false);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [router]);
+
+  const handleLogout = () => {
+    clearAuthUser();
+    router.replace('/');
+  };
 
   const loadReviews = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
@@ -50,8 +78,10 @@ export default function ReviewPage() {
   }, []);
 
   useEffect(() => {
-    loadReviews(false);
-  }, [loadReviews]);
+    if (!checkingAuth && user) {
+      loadReviews(false);
+    }
+  }, [checkingAuth, user, loadReviews]);
 
   // Toast auto-clear
   const showToast = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
@@ -98,7 +128,6 @@ export default function ReviewPage() {
     actionType: DecisionAction,
     message?: string
   ) => {
-    // Optimistically remove project from state immediately
     setProjects((prev) =>
       prev.filter((item) => {
         const ref = String(getRawValue(item, 'reference_number', 'Reference Number', 'ref_num') || '');
@@ -131,12 +160,26 @@ export default function ReviewPage() {
     });
   }, [projects, searchQuery]);
 
+  // Show spinner while verifying auth session
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-slate-500 dark:text-slate-400">
+          <svg className="w-8 h-8 animate-spin text-indigo-600" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          <span className="text-sm font-medium">Verifying session…</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans pb-16">
       {/* Toast Notification Banner */}
       {toastMessage && (
         <div className="fixed top-24 right-5 sm:right-8 z-60 animate-in slide-in-from-top-4 fade-in duration-300">
-
           <div className={`px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 border text-xs sm:text-sm font-medium ${
             toastMessage.type === 'error'
               ? 'bg-rose-900 text-white border-rose-700'
@@ -165,109 +208,112 @@ export default function ReviewPage() {
       )}
 
       {/* Top Header Bar */}
-      <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-8 py-4">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 font-bold text-lg">
+      <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-8 py-3">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+          {/* Left: Logo + Title */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 font-bold text-base shrink-0">
               LR
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-                  Lead & Project Review Dashboard
+                <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-slate-50 leading-tight">
+                  Lead &amp; Project Review Dashboard
                 </h1>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 dark:border dark:border-indigo-800">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 dark:border dark:border-indigo-800 shrink-0">
                   {projects.length} Pending
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Review and enrich construction projects awaiting human-in-the-loop validation
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">
+                Review and enrich construction projects awaiting validation
               </p>
             </div>
           </div>
 
-          {/* Refresh & Sync Controls */}
-          <div className="flex flex-col items-end gap-1.5 self-end sm:self-auto">
-            <div className="flex items-center gap-3 flex-wrap justify-end">
-              {lastUpdated && (
-                <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden md:inline">
-                  Last checked: {lastUpdated}
-                </span>
-              )}
-
-              <button
-                onClick={() => loadReviews(true)}
-                disabled={loading || refreshing}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-lg text-xs transition shadow-md shadow-indigo-500/20 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
-              >
-                <svg
-                  className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                {refreshing ? 'Refreshing...' : 'Refresh'}
-              </button>
-
-              <button
-                onClick={handleRunEnrichment}
-                disabled={enriching}
-                aria-label="Run Lead Enrichment"
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-lg text-xs transition shadow-md shadow-indigo-500/20 disabled:opacity-50 flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed"
-              >
-                {enriching ? (
-                  <svg
-                    className="w-4 h-4 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                ) : (
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 10V3L4 14h7v7l9-11h-7z"
-                    />
-                  </svg>
-                )}
-                {enriching ? 'Running...' : 'Run Lead Enrichment'}
-              </button>
-            </div>
-
-            {enrichmentMessage && (
-              <span className={`text-[11px] font-medium transition text-right ${
-                enriching
-                  ? 'text-amber-600 dark:text-amber-400'
-                  : enrichmentMessage.includes('completed')
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : 'text-rose-600 dark:text-rose-400'
-              }`}>
-                {enrichmentMessage}
+          {/* Right: Controls + User Badge + Sign Out Button */}
+          <div className="flex items-center gap-2 shrink-0">
+            {lastUpdated && (
+              <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden lg:inline shrink-0">
+                Last: {lastUpdated}
               </span>
             )}
+
+            <button
+              onClick={() => loadReviews(true)}
+              disabled={loading || refreshing}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-lg text-xs transition shadow-md shadow-indigo-500/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <svg
+                className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
+
+            <button
+              onClick={handleRunEnrichment}
+              disabled={enriching}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-lg text-xs transition shadow-md shadow-indigo-500/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              {enriching ? (
+                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              )}
+              {enriching ? 'Running…' : 'Run Enrichment'}
+            </button>
+
+            {/* Authenticated User Badge */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shrink-0">
+              <div className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                {user?.username?.charAt(0)?.toUpperCase() ?? 'U'}
+              </div>
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-200 max-w-[120px] truncate">
+                {user?.username ?? 'User'}
+              </span>
+            </div>
+
+            {/* Sign Out Button */}
+            <button
+              onClick={handleLogout}
+              title="Sign Out"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 rounded-lg border border-rose-200 dark:border-rose-800/60 transition shadow-2xs cursor-pointer shrink-0"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span>Sign Out</span>
+            </button>
           </div>
         </div>
+
+        {/* Enrichment status bar */}
+        {enrichmentMessage && (
+          <div className="max-w-7xl mx-auto mt-1.5">
+            <span className={`text-[11px] font-medium ${
+              enriching
+                ? 'text-amber-600 dark:text-amber-400'
+                : enrichmentMessage.includes('completed')
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-rose-600 dark:text-rose-400'
+            }`}>
+              {enrichmentMessage}
+            </span>
+          </div>
+        )}
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-8 pt-8 space-y-6">
